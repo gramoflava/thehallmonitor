@@ -335,20 +335,17 @@ def _extract_lines_via_antiword(doc_path: str) -> list[str]:
     # ANTIWORDHOME tells antiword where to find its encoding mapping files.
     # Without it, antiword looks in $HOME/.antiword/ which may not exist
     # (e.g. when running as a non-login user in Docker).
+    # -m UTF-8.txt forces UTF-8 output regardless of system locale — this
+    # avoids "Can't set the UTF-8 locale" errors in slim Docker images
+    # that don't have en_US.UTF-8 installed.
     antiword_home = os.environ.get("ANTIWORDHOME", "/usr/share/antiword")
     result = subprocess.run(
-        ["antiword", doc_path],
+        ["antiword", "-m", "UTF-8.txt", doc_path],
         capture_output=True,
         timeout=120,
-        env=dict(os.environ,
-                 LANG="en_US.UTF-8", LC_ALL="en_US.UTF-8",
-                 ANTIWORDHOME=antiword_home),
+        env=dict(os.environ, ANTIWORDHOME=antiword_home),
     )
-    # Try UTF-8 first (Linux production), fall back to Latin-1 (macOS dev)
-    try:
-        text = result.stdout.decode("utf-8")
-    except UnicodeDecodeError:
-        text = result.stdout.decode("latin-1")
+    text = result.stdout.decode("utf-8", errors="replace")
 
     cells: list[str] = []
     for raw_line in text.splitlines():
