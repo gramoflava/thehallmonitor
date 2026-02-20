@@ -332,11 +332,17 @@ def _extract_lines_via_antiword(doc_path: str) -> list[str]:
     if not shutil.which("antiword"):
         raise RuntimeError("antiword not found in PATH")
 
+    # ANTIWORDHOME tells antiword where to find its encoding mapping files.
+    # Without it, antiword looks in $HOME/.antiword/ which may not exist
+    # (e.g. when running as a non-login user in Docker).
+    antiword_home = os.environ.get("ANTIWORDHOME", "/usr/share/antiword")
     result = subprocess.run(
         ["antiword", doc_path],
         capture_output=True,
         timeout=120,
-        env=dict(os.environ, LANG="en_US.UTF-8", LC_ALL="en_US.UTF-8"),
+        env=dict(os.environ,
+                 LANG="en_US.UTF-8", LC_ALL="en_US.UTF-8",
+                 ANTIWORDHOME=antiword_home),
     )
     # Try UTF-8 first (Linux production), fall back to Latin-1 (macOS dev)
     try:
@@ -381,9 +387,9 @@ def parse_doc_file(doc_path: str) -> list[tuple[str, str, str]]:
         try:
             docx_path = _convert_doc_to_docx(doc_path, tmpdir)
             cells = _extract_cells_from_docx(docx_path)
-            logger.info("LibreOffice conversion succeeded (%d cells)", len(cells))
+            logger.info("doc→docx conversion succeeded (%d cells)", len(cells))
         except Exception as lo_err:
-            logger.warning("LibreOffice failed: %s — trying antiword", lo_err)
+            logger.warning("doc→docx conversion failed: %s — trying antiword", lo_err)
             try:
                 cells = _extract_lines_via_antiword(doc_path)
             except Exception as aw_err:
