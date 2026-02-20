@@ -146,7 +146,7 @@ docker-build:
 	$(COMPOSE) build
 
 .PHONY: docker-up
-docker-up: .env $(DATA_DIR)/.gitkeep
+docker-up: docker-build .env $(DATA_DIR)/.gitkeep
 	$(COMPOSE) up -d
 	@echo "✓ Container started. Logs: make docker-logs"
 
@@ -159,12 +159,12 @@ docker-logs:
 	$(COMPOSE) logs -f
 
 .PHONY: docker-update-db
-docker-update-db:
+docker-update-db: docker-build
 	$(COMPOSE) run --rm $(SERVICE) python updater.py
 	@echo "✓ DB updated."
 
 .PHONY: docker-reset-db
-docker-reset-db:
+docker-reset-db: docker-build
 	@echo "Wiping DB..."
 	rm -f $(DB_FILES)
 	$(COMPOSE) run --rm $(SERVICE) python updater.py --force
