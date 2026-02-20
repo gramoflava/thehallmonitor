@@ -175,14 +175,28 @@ def parse_cell_to_tokens(raw_text: str) -> list[tuple[str, str, str]]:
         add("t.me", "domain")
         remaining = remaining.replace(m.group(), " ", 1)
 
-    # ── 3. youtube.com/ bare links ───────────────────────────────────────────
-    _yt_re = re.compile(
-        r"\b(?:www\.)?youtube\.com/[^\s,;\)\]\"\'<>]+", re.IGNORECASE
+    # ── 3. Bare domain URLs (no scheme): domain.tld/path ─────────────────────
+    # Matches things like "facebook.com/pagename" or "www.youtube.com/channel/x"
+    # that appear without https:// in the source document.
+    # Must run before text extraction so the domain name isn't tokenised as text.
+    _bare_re = re.compile(
+        r"\b(?:www\.)?([a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?"
+        r"(?:\.[a-zA-Z]{2,})+)"   # domain.tld (no scheme)
+        r"(/[^\s,;\)\]\"\'<>]*)?",  # optional /path
+        re.IGNORECASE,
     )
-    for m in _yt_re.finditer(text):
+    for m in _bare_re.finditer(remaining):
+        path = m.group(2) or ""
         norm = normalize_url(m.group())
-        add(norm, "url")
-        # youtube.com is a platform — specific URL stored, bare domain skipped
+        domain = _extract_domain(norm)
+        if not domain or "." not in domain or len(domain) <= 3:
+            continue
+        if path:
+            # Has a specific path — store the full URL
+            add(norm, "url")
+        # Store domain only if it's not a platform (to avoid blocking all of facebook.com)
+        if domain not in _PLATFORM_DOMAINS:
+            add(domain, "domain")
         remaining = remaining.replace(m.group(), " ", 1)
 
     # ── 4. @handles ──────────────────────────────────────────────────────────
