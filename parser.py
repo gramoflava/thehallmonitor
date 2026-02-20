@@ -59,6 +59,10 @@ _STOPWORDS: frozenset[str] = frozenset(
         "channel", "youtube", "telegram", "https", "http", "www",
         "link", "page", "site", "list", "info", "news",
         "photo", "video", "image", "group", "chat", "room",
+        # ── Platform names (bare name without domain is too broad) ────────────
+        "facebook", "instagram", "linkedin", "twitter", "tiktok",
+        "pinterest", "snapchat", "reddit", "discord", "twitch",
+        "spotify", "patreon", "github", "medium",
         # ── Russian common words ──────────────────────────────────────────────
         "канал", "сайт", "ссылка", "список", "материал", "другие",
         "страница", "ресурс", "название", "описание", "адрес",
@@ -73,6 +77,8 @@ _STOPWORDS: frozenset[str] = frozenset(
 # Major platforms where only specific paths/channels are forbidden —
 # storing the bare domain would block the entire platform.
 # The full URL token is still stored; only the domain extraction is skipped.
+# Any subdomain of these (e.g. m.facebook.com, ru-ru.facebook.com) is also
+# suppressed — checked via _is_platform_domain() below.
 _PLATFORM_DOMAINS: frozenset[str] = frozenset({
     "youtube.com", "youtu.be",
     "facebook.com", "fb.com", "fb.me",
@@ -97,6 +103,18 @@ _PLATFORM_DOMAINS: frozenset[str] = frozenset({
     "blogspot.com",
     "livejournal.com",
 })
+
+
+def _is_platform_domain(domain: str) -> bool:
+    """Return True if domain is a platform domain or any subdomain of one."""
+    domain = domain.lower()
+    if domain in _PLATFORM_DOMAINS:
+        return True
+    # Check subdomains: m.facebook.com, ru-ru.facebook.com, etc.
+    for platform in _PLATFORM_DOMAINS:
+        if domain.endswith("." + platform):
+            return True
+    return False
 
 # Minimum char length for text-type tokens
 _MIN_TEXT_LEN = 4
@@ -161,7 +179,7 @@ def parse_cell_to_tokens(raw_text: str) -> list[tuple[str, str, str]]:
         if norm:
             add(norm, "url")
             domain = _extract_domain(norm)
-            if "." in domain and len(domain) > 3 and domain not in _PLATFORM_DOMAINS:
+            if "." in domain and len(domain) > 3 and not _is_platform_domain(domain):
                 add(domain, "domain")
         remaining = remaining.replace(m.group(), " ", 1)
 
@@ -195,7 +213,7 @@ def parse_cell_to_tokens(raw_text: str) -> list[tuple[str, str, str]]:
             # Has a specific path — store the full URL
             add(norm, "url")
         # Store domain only if it's not a platform (to avoid blocking all of facebook.com)
-        if domain not in _PLATFORM_DOMAINS:
+        if not _is_platform_domain(domain):
             add(domain, "domain")
         remaining = remaining.replace(m.group(), " ", 1)
 
