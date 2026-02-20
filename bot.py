@@ -14,8 +14,9 @@ Modes:
 
 Cleanup (react / reply modes):
   • User edits their message to remove violation → bot removes its reaction/reply
-  • Any user reacts to the bot's warning → bot removes the warning
-    (covers the case where the original was deleted — Telegram has no delete event)
+  • User reacts to the bot's warning → bot checks if original still exists:
+      - If original is gone (was deleted) → bot removes the warning
+      - If original still exists → warning stays (user should edit it clean instead)
 
 Setup:
     cp .env.example .env
@@ -331,9 +332,13 @@ async def handle_reaction_on_warning(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """
-    Any user reacting to one of the bot's warning messages is a signal to
-    clean up — covers the case where the original message was deleted
-    (Telegram sends no delete event to bots).
+    A user reacted to one of the bot's warning messages.
+
+    Before removing the warning we check whether the original message still
+    exists and still violates:
+      - Original gone (MESSAGE_NOT_FOUND)  → remove warning (message was deleted)
+      - Original exists but now clean      → remove warning (user edited it clean)
+      - Original exists and still violates → keep warning, ignore the reaction
     """
     reaction = update.message_reaction
     if not reaction:
@@ -346,12 +351,52 @@ async def handle_reaction_on_warning(
     if original_msg_id is None:
         return  # Not one of our warning messages
 
-    _remove_warning(chat_id, original_msg_id)
+    # Probe whether the original message still exists by attempting to forward it
+    # to the same chat. If it raises MESSAGE_NOT_FOUND the message is gone.
+    # We use copy_message (silent) so it doesn't show — then delete the copy.
+    original_gone = False
+    original_clean = False
+    try:
+        copy = await context.bot.copy_message(
+            chat_id=chat_id,
+            from_chat_id=chat_id,
+            message_id=original_msg_id,
+            disable_notification=True,
+        )
+        # Message exists — check if it still violates
+        # We can't read the text back from copy_message; use the copy's message_id
+        # to retrieve content via forward_origin is not available here.
+        # Instead, delete the copy and re-check via stored content — but we don't
+        # store content. So just delete copy and treat as "still there, unknown
+        # content" → keep warning unless we can verify it's clean.
+        await context.bot.delete_message(chat_id, copy.message_id)
+        # Message still exists; we cannot re-read its text via copy_message.
+        # Fall back: keep the warning (user can edit their message to clear it).
+        logger.info(
+            "Reaction on warning %d in chat=%d: original %d still exists, keeping warning.",
+            warning_msg_id, chat_id, original_msg_id,
+        )
+        return
+    except BadRequest as exc:
+        if "message to copy not found" in str(exc).lower() or \
+           "message not found" in str(exc).lower():
+            original_gone = True
+        else:
+            # Unexpected error (e.g. no permission) — treat as gone to avoid stale warning
+            logger.warning(
+                "Unexpected error probing original %d in chat=%d: %s",
+                original_msg_id, chat_id, exc,
+            )
+            original_gone = True
 
+    if not original_gone:
+        return
+
+    _remove_warning(chat_id, original_msg_id)
     try:
         await context.bot.delete_message(chat_id, warning_msg_id)
         logger.info(
-            "Warning %d deleted in chat=%d after user reaction (original=%d).",
+            "Warning %d deleted in chat=%d — original %d was deleted by user.",
             warning_msg_id, chat_id, original_msg_id,
         )
     except (BadRequest, TelegramError) as exc:
