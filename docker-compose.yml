@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  thehallmonitor:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Persist the SQLite database across container restarts
+      - ./data:/app/data
+    tmpfs:
+      # LibreOffice needs writable /tmp for scratch space
+      - /tmp:size=256m
+    shm_size: 256m

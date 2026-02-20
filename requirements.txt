@@ -1,0 +1,15 @@
+# Telegram bot framework (includes APScheduler for job_queue)
+python-telegram-bot[job-queue]==21.3
+
+# .docx parsing (after LibreOffice converts .doc → .docx)
+python-docx==1.1.2
+
+# HTTP client (used by updater for downloading the .doc file)
+requests==2.31.0
+
+# Environment variable management
+python-dotenv==1.0.1
+
+# Testing
+pytest==8.2.0
+pytest-asyncio==0.23.6
