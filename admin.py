@@ -176,6 +176,12 @@ async def handle_callback(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int | None:
     query: CallbackQuery = update.callback_query
+
+    # Only handle callbacks that originated in a private chat.
+    if query.message and query.message.chat.type != "private":
+        await query.answer()
+        return None
+
     await query.answer()
 
     data = query.data or ""
@@ -371,5 +377,5 @@ def build_admin_handlers() -> list:
         CommandHandler("start",    cmd_start,    filters=private),
         CommandHandler("settings", cmd_settings, filters=private),
         conv,
-        CallbackQueryHandler(handle_callback, filters=private),
+        CallbackQueryHandler(handle_callback),
     ]
