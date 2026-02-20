@@ -140,9 +140,43 @@ def normalize_url(url: str) -> str:
     return url
 
 
+# Cyrillic homoglyphs that appear in copy-pasted or OCR'd URLs.
+# Maps Cyrillic lookalike → correct Latin character.
+_HOMOGLYPHS: dict[str, str] = {
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c",
+    "у": "y", "х": "x", "ѕ": "s", "і": "i", "ј": "j",
+    "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M",
+    "Н": "H", "О": "O", "Р": "P", "С": "C", "Т": "T",
+    "У": "Y", "Х": "X",
+}
+_HOMOGLYPH_RE = re.compile("[" + "".join(_HOMOGLYPHS) + "]")
+
+
+def _fix_homoglyphs(s: str) -> str:
+    return _HOMOGLYPH_RE.sub(lambda m: _HOMOGLYPHS[m.group()], s)
+
+
 def _extract_domain(normalized_url: str) -> str:
     """Extract bare domain from an already-normalized URL."""
-    return normalized_url.split("/")[0].split("?")[0]
+    domain = normalized_url.split("/")[0].split("?")[0]
+    # Strip trailing dot (e.g. "instagram.com.")
+    domain = domain.rstrip(".")
+    # Replace Cyrillic homoglyphs (e.g. "tiktok.сom" → "tiktok.com")
+    domain = _fix_homoglyphs(domain)
+    # Reject domains containing @ (OCR artifact like "twitter.com@handle")
+    if "@" in domain:
+        return ""
+    # Reject OCR artifacts like "youtube.com.channel" where a dot replaces a slash.
+    # A real domain has its TLD as the very last label. If a known short TLD
+    # (.com, .org, .net, .by, .ru, …) appears as a non-final label, it's junk.
+    _COMMON_TLDS = {"com", "org", "net", "by", "ru", "io", "co", "me",
+                    "tv", "fm", "app", "live", "online", "info", "biz"}
+    parts = domain.split(".")
+    # Any non-final label that looks like a TLD → reject
+    for part in parts[:-1]:
+        if part in _COMMON_TLDS:
+            return ""
+    return domain
 
 
 # ── Cell-level token extraction ──────────────────────────────────────────────
