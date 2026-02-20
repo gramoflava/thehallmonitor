@@ -1,7 +1,7 @@
 # Pin by digest so the build is reproducible months later.
 # To update: docker pull python:3.11-slim, then copy the new digest from
 #   docker inspect --format='{{index .RepoDigests 0}}' python:3.11-slim
-FROM python:3.11-slim@sha256:ad48e588f8208ce2e0890e4cdc43c3477a3bc96e9c06c8ffad41f64da1c43b19
+FROM python:3.11-slim
 
 # ── System dependencies ───────────────────────────────────────────────────────
 # libreoffice-writer: .doc → .docx conversion (primary path)
