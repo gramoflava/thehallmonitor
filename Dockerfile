@@ -1,7 +1,7 @@
-# Pin by digest so the build is reproducible months later.
-# To update: docker pull python:3.11-slim, then copy the new digest from
-#   docker inspect --format='{{index .RepoDigests 0}}' python:3.11-slim
-FROM python:3.11-slim
+# Pin to a specific patch version tag — reproducible across all platforms
+# without needing digest pinning (which is architecture-specific).
+# To upgrade: change the version below, e.g. 3.11.15-slim-bookworm
+FROM python:3.11.14-slim-bookworm
 
 # ── System dependencies ───────────────────────────────────────────────────────
 # libreoffice-writer: .doc → .docx conversion (primary path)

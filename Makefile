@@ -69,7 +69,7 @@ help:
 	@echo "    make docker-reset-db   Force-repopulate DB inside running container"
 	@echo "    make docker-shell   Open shell inside running container"
 	@echo "    make docker-clean   Remove container + image + local DB"
-	@echo "    make docker-upgrade Show new base image digest (then update Dockerfile)"
+	@echo "    make docker-upgrade Show available base image versions (then update Dockerfile)"
 	@echo ""
 	@echo "  Linux system service (Ubuntu/Debian):"
 	@echo "    make install        Install as systemd service"
@@ -176,13 +176,13 @@ docker-shell:
 
 .PHONY: docker-upgrade
 docker-upgrade:
-	@echo "Pulling latest python:3.11-slim digest..."
-	docker pull python:3.11-slim
+	@echo "Latest python:3.11.x-slim-bookworm tags on Docker Hub:"
+	@curl -s "https://registry.hub.docker.com/v2/repositories/library/python/tags/?page_size=100&name=3.11" \
+		| python3 -c "import sys,json; tags=[t['name'] for t in json.load(sys.stdin)['results'] if 'slim-bookworm' in t['name'] and t['name'].startswith('3.11.')]; tags.sort(reverse=True); print('\n'.join(tags[:5]))"
 	@echo ""
-	@echo "New digest:"
-	@docker inspect --format='{{index .RepoDigests 0}}' python:3.11-slim
+	@grep '^FROM' Dockerfile
 	@echo ""
-	@echo "Update the FROM line in Dockerfile with the digest above, then run: make docker-build"
+	@echo "To upgrade: change the version in the FROM line above, then run: make docker-build"
 
 .PHONY: docker-clean
 docker-clean: docker-down

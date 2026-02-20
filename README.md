@@ -203,7 +203,7 @@ make docker-up     — start in background (docker-compose up -d)
 make docker-down   — stop (docker-compose down)
 make docker-logs   — tail container logs
 make docker-restart — restart the container
-make docker-upgrade — show current base image digest for pinning
+make docker-upgrade — list available base image versions (to update Dockerfile)
 ```
 
 ---
@@ -219,7 +219,9 @@ docker-compose up -d
 
 The `./data` directory is mounted as a volume so the SQLite database persists
 across container restarts. LibreOffice and antiword are both included in the
-Docker image. The base image is pinned by SHA-256 digest for reproducible builds.
+Docker image. The base image is pinned to a specific Python patch version tag
+(e.g. `3.11.14-slim-bookworm`) for reproducible builds across all platforms.
+Run `make docker-upgrade` to check for newer versions.
 
 ---
 
