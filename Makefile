@@ -160,15 +160,15 @@ docker-logs:
 
 .PHONY: docker-update-db
 docker-update-db:
-	$(COMPOSE) exec $(SERVICE) python updater.py
-	@echo "✓ DB updated inside container."
+	$(COMPOSE) run --rm $(SERVICE) python updater.py
+	@echo "✓ DB updated."
 
 .PHONY: docker-reset-db
 docker-reset-db:
-	@echo "Wiping DB inside container..."
-	$(COMPOSE) exec $(SERVICE) sh -c 'rm -f /app/data/*.db /app/data/*.db-shm /app/data/*.db-wal'
-	$(COMPOSE) exec $(SERVICE) python updater.py --force
-	@echo "✓ DB repopulated inside container."
+	@echo "Wiping DB..."
+	rm -f $(DB_FILES)
+	$(COMPOSE) run --rm $(SERVICE) python updater.py --force
+	@echo "✓ DB repopulated."
 
 .PHONY: docker-shell
 docker-shell:
