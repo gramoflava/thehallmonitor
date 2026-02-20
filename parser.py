@@ -2,9 +2,11 @@
 parser.py — Convert a .doc file into a list of forbidden tokens.
 
 Conversion chain:
-  1. LibreOffice headless: .doc → .docx, then python-docx table extraction
-  2. antiword fallback: .doc → plain text, treat each line as a candidate cell
-  3. RuntimeError if both fail
+  1. abiword headless: .doc → .docx, then python-docx table extraction
+     (lightweight — ~30 MB RAM, suitable for low-memory servers)
+  2. LibreOffice headless fallback (if abiword is not available)
+  3. antiword fallback: .doc → plain text, treat each line as a candidate cell
+  4. RuntimeError if all three fail
 
 Exported public API:
   parse_doc_file(path)         → list of (raw_text, token, token_type)
@@ -208,59 +210,70 @@ def parse_cell_to_tokens(raw_text: str) -> list[tuple[str, str, str]]:
     return results
 
 
-# ── LibreOffice conversion ───────────────────────────────────────────────────
+# ── .doc → .docx conversion ──────────────────────────────────────────────────
 
 
-def _find_soffice() -> str | None:
+def _convert_with_abiword(doc_path: str, outdir: str) -> str:
+    """
+    Convert .doc → .docx using abiword headless (~30 MB RAM).
+    Returns the path to the resulting .docx file.
+    """
+    if not shutil.which("abiword"):
+        raise RuntimeError("abiword not found in PATH")
+
+    stem = Path(doc_path).stem
+    docx_path = os.path.join(outdir, stem + ".docx")
+    cmd = ["abiword", "--to=docx", f"--to-name={docx_path}", doc_path]
+    logger.info("abiword: %s", " ".join(cmd))
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"abiword exited {result.returncode}: {result.stderr[:600]}"
+        )
+    if not os.path.exists(docx_path):
+        candidates = list(Path(outdir).glob("*.docx"))
+        if not candidates:
+            raise RuntimeError(
+                f"abiword produced no .docx in {outdir}. "
+                f"stdout={result.stdout[:300]}"
+            )
+        docx_path = str(candidates[0])
+    logger.info("abiword output: %s", docx_path)
+    return docx_path
+
+
+def _convert_with_libreoffice(doc_path: str, outdir: str) -> str:
+    """
+    Convert .doc → .docx using LibreOffice headless (~500 MB RAM).
+    Returns the path to the resulting .docx file.
+    """
+    soffice = None
     for candidate in [
-        "soffice",
-        "libreoffice",
-        "/usr/bin/soffice",
-        "/usr/bin/libreoffice",
+        "soffice", "libreoffice",
+        "/usr/bin/soffice", "/usr/bin/libreoffice",
         "/usr/lib/libreoffice/program/soffice",
         "/opt/libreoffice/program/soffice",
-        # macOS via homebrew
         "/Applications/LibreOffice.app/Contents/MacOS/soffice",
     ]:
         if shutil.which(candidate) or os.path.isfile(candidate):
-            return candidate
-    return None
-
-
-def _convert_doc_to_docx(doc_path: str, outdir: str) -> str:
-    """
-    Convert .doc → .docx using LibreOffice headless.
-    Returns the path to the resulting .docx file.
-    """
-    soffice = _find_soffice()
+            soffice = candidate
+            break
     if not soffice:
-        raise RuntimeError(
-            "LibreOffice (soffice) not found. "
-            "Install it or ensure it is in PATH."
-        )
+        raise RuntimeError("LibreOffice (soffice) not found in PATH")
 
     cmd = [
-        soffice,
-        "--headless",
-        "--norestore",
-        "--nofirststartwizard",
-        "--convert-to", "docx:MS Word 2007 XML",
-        "--outdir", outdir,
-        doc_path,
+        soffice, "--headless", "--norestore", "--nofirststartwizard",
+        "--convert-to", "docx:MS Word 2007 XML", "--outdir", outdir, doc_path,
     ]
     logger.info("LibreOffice: %s", " ".join(cmd))
-    result = subprocess.run(
-        cmd, capture_output=True, text=True, timeout=180
-    )
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     if result.returncode != 0:
         raise RuntimeError(
             f"LibreOffice exited {result.returncode}: {result.stderr[:600]}"
         )
-
     stem = Path(doc_path).stem
     docx_path = os.path.join(outdir, stem + ".docx")
     if not os.path.exists(docx_path):
-        # LibreOffice sometimes appends a suffix — search the outdir
         candidates = list(Path(outdir).glob("*.docx"))
         if not candidates:
             raise RuntimeError(
@@ -268,9 +281,17 @@ def _convert_doc_to_docx(doc_path: str, outdir: str) -> str:
                 f"stdout={result.stdout[:300]}"
             )
         docx_path = str(candidates[0])
-
     logger.info("LibreOffice output: %s", docx_path)
     return docx_path
+
+
+def _convert_doc_to_docx(doc_path: str, outdir: str) -> str:
+    """Try abiword first (low RAM), fall back to LibreOffice."""
+    try:
+        return _convert_with_abiword(doc_path, outdir)
+    except RuntimeError as e:
+        logger.warning("abiword failed: %s — trying LibreOffice", e)
+        return _convert_with_libreoffice(doc_path, outdir)
 
 
 def _extract_cells_from_docx(docx_path: str) -> list[str]:
@@ -348,9 +369,10 @@ def parse_doc_file(doc_path: str) -> list[tuple[str, str, str]]:
     """
     Full pipeline: .doc file path → list of (raw_text, token, token_type).
 
-    1. Try LibreOffice headless + python-docx table extraction.
-    2. Fall back to antiword plain-text extraction.
-    3. Raise RuntimeError if both fail.
+    1. Try abiword → .docx → python-docx table extraction.
+    2. Fall back to LibreOffice → .docx → python-docx table extraction.
+    3. Fall back to antiword plain-text extraction.
+    4. Raise RuntimeError if all three fail.
     """
     cells: list[str] = []
 
@@ -366,9 +388,9 @@ def parse_doc_file(doc_path: str) -> list[tuple[str, str, str]]:
                 cells = _extract_lines_via_antiword(doc_path)
             except Exception as aw_err:
                 raise RuntimeError(
-                    f"Both converters failed.\n"
-                    f"  LibreOffice: {lo_err}\n"
-                    f"  antiword:    {aw_err}"
+                    f"All converters failed.\n"
+                    f"  abiword/LibreOffice: {lo_err}\n"
+                    f"  antiword:           {aw_err}"
                 ) from aw_err
 
         # Parse every cell

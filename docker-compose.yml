@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   thehallmonitor:
     build: .
@@ -10,6 +8,5 @@ services:
       # Persist the SQLite database across container restarts
       - ./data:/app/data
     tmpfs:
-      # LibreOffice needs writable /tmp for scratch space
-      - /tmp:size=256m
-    shm_size: 256m
+      # abiword needs writable /tmp for scratch space during conversion
+      - /tmp:size=128m

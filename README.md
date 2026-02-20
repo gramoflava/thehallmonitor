@@ -111,8 +111,9 @@ and warns you if the bot doesn't currently have them.
 ### Requirements
 
 - Python 3.9+
-- **LibreOffice** (for `.doc` → `.docx` conversion, preferred) **or**
-  **antiword** (plain-text fallback)
+- **abiword** (for `.doc` → `.docx` conversion, preferred — lightweight, ~30 MB RAM) **or**
+  **LibreOffice** (heavier fallback, ~500 MB RAM) **or**
+  **antiword** (plain-text last resort)
 - A Telegram bot token from [@BotFather](https://t.me/BotFather)
 
 ### Install
@@ -218,8 +219,9 @@ docker-compose up -d
 ```
 
 The `./data` directory is mounted as a volume so the SQLite database persists
-across container restarts. LibreOffice and antiword are both included in the
-Docker image. The base image is pinned to a specific Python patch version tag
+across container restarts. abiword and antiword are included in the Docker image
+(abiword uses ~30 MB RAM vs ~500 MB for LibreOffice, suitable for small VPS).
+The base image is pinned to a specific Python patch version tag
 (e.g. `3.11.14-slim-bookworm`) for reproducible builds across all platforms.
 Run `make docker-upgrade` to check for newer versions.
 
